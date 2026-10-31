@@ -11,7 +11,8 @@
 #         3 = optional
 # Exit code: 0 = all Tier 1 present, 1 = something in Tier 1 is missing.
 #
-# Package names are for Arch / AUR. On other distros read them as hints.
+# Package names are for Arch / AUR. On other distros read them as hints. On Debian / Ubuntu / Mint,
+# install-deps-debian.sh puts Hyprland, Quickshell and Qt in ~/.nix-profile; this check looks there too.
 
 set -u
 
@@ -80,6 +81,15 @@ add_pkg() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Hyprland / Quickshell / Qt from Nix (install-deps-debian.sh): put them on PATH for the checks,
+# and read the Qt folders the flake wrote down (there is no qmake to ask).
+NIX_QT_ENV="$HOME/.nix-profile/share/sekaipop/nix-qt.env"
+SEKAIPOP_QT_VERSION=""; SEKAIPOP_QML_DIRS=""; SEKAIPOP_QT_PLUGIN_DIRS=""
+if [ -f "$NIX_QT_ENV" ]; then
+    case ":$PATH:" in *":$HOME/.nix-profile/bin:"*) ;; *) PATH="$HOME/.nix-profile/bin:$PATH" ;; esac
+    . "$NIX_QT_ENV"
+fi
+
 # cmd <tier> <command> <pkg> [repo] [note]
 cmd() { have "$2"; record "$1" "$2" $((! $? )) "$3" "${4:-pac}" "${5:-}"; }
 
@@ -95,7 +105,7 @@ font() { fc-list 2>/dev/null | grep -qi -- "$2"; record "$1" "font: $2" $((! $? 
 
 # Directories where Qt looks for QML modules
 QML_DIRS=()
-for d in "${QML_IMPORT_PATH:-}" "${QML2_IMPORT_PATH:-}"; do
+for d in "${QML_IMPORT_PATH:-}" "${QML2_IMPORT_PATH:-}" "$SEKAIPOP_QML_DIRS"; do
     IFS=: read -ra parts <<<"$d"; for p in "${parts[@]}"; do [ -n "$p" ] && QML_DIRS+=("$p"); done
 done
 for q in qmake6 qmake-qt6; do
@@ -112,6 +122,7 @@ qml() {
 
 # Directories where Qt looks for plugins
 QT_PLUG_DIRS=()
+IFS=: read -ra parts <<<"$SEKAIPOP_QT_PLUGIN_DIRS"; for p in "${parts[@]}"; do [ -n "$p" ] && QT_PLUG_DIRS+=("$p"); done
 for q in qmake6 qmake-qt6; do
     if have "$q"; then d=$("$q" -query QT_INSTALL_PLUGINS 2>/dev/null) && [ -n "$d" ] && QT_PLUG_DIRS+=("$d"); fi
 done
@@ -136,6 +147,7 @@ fi
 if [ -r /etc/os-release ]; then . /etc/os-release; printf '  %sdistro: %s%s\n' "$D" "${PRETTY_NAME:-unknown}" "$Z"; fi
 if ! have pacman; then
     printf '  %s[note]%s no pacman found: package names below are Arch names, translate them for your distro\n' "$Y" "$Z"
+    have apt-get && printf '  %s[note]%s apt found: ./install.sh installs all of this with apt + Nix (install-deps-debian.sh)\n' "$Y" "$Z"
 fi
 cmd 1 systemctl systemd pac "service checks and the power menu use it"
 cmd 1 sh dash pac
@@ -195,6 +207,14 @@ for q in qmake6 qmake-qt6 qtpaths6; do
         fi
     fi
 done
+if [ "$QT_CHECKED" = 0 ] && [ -n "$SEKAIPOP_QT_VERSION" ]; then
+    if [ "$(printf '%s\n6.7.0\n' "$SEKAIPOP_QT_VERSION" | sort -V | head -n1)" = "6.7.0" ]; then
+        record 1 "Qt $SEKAIPOP_QT_VERSION from Nix (needs 6.7 or newer)" 1 qt6-base pac
+    else
+        record 1 "Qt $SEKAIPOP_QT_VERSION from Nix (needs 6.7 or newer)" 0 qt6-base pac "run install-deps-debian.sh again"
+    fi
+    QT_CHECKED=1
+fi
 [ "$QT_CHECKED" = 0 ] && printf '  %s(Qt version not checked: no qmake6/qtpaths6 found; Qt 6.7 or newer is needed)%s\n' "$D" "$Z"
 qtplugin 1 "imageformats/libqsvg.so" qt6-svg "Qt SVG plugin" "app icons from icon themes are SVG"
 qtplugin 2 "imageformats/libqwebp.so" qt6-imageformats "Qt image formats (webp)" "the rice accepts webp wallpapers"
@@ -298,7 +318,7 @@ else
     any 3 "qt5ct / qt6ct (Qt app colours; then set QT_QPA_PLATFORMTHEME=qt6ct)" qt6ct pac qt6ct qt5ct
 fi
 cmd 3 xrdb xorg-xrdb pac "XWayland cursor"
-[ -d /usr/share/themes/adw-gtk3 ] || [ -d "$HOME/.themes/adw-gtk3" ] \
+[ -d /usr/share/themes/adw-gtk3 ] || [ -d "$HOME/.themes/adw-gtk3" ] || [ -d "$HOME/.nix-profile/share/themes/adw-gtk3" ] \
     && record 3 "adw-gtk3 GTK theme" 1 adw-gtk-theme pac || record 3 "adw-gtk3 GTK theme" 0 adw-gtk-theme pac
 if [ -n "${QT_QPA_PLATFORMTHEME:-}" ]; then
     printf '  %sQT_QPA_PLATFORMTHEME=%s%s\n' "$D" "$QT_QPA_PLATFORMTHEME" "$Z"
@@ -326,8 +346,12 @@ cmd 3 mpvpaper mpvpaper aur "video wallpaper via mpv (built-in player is the fal
 # --------------------------------------------------------------------------
 section "Updates badge, displays, extras"
 # --------------------------------------------------------------------------
-cmd 3 checkupdates pacman-contrib pac "official update count (Arch only)"
-any 3 "AUR helper for the update count (install yay or paru from the AUR)" "" manual yay paru
+if have pacman; then
+    cmd 3 checkupdates pacman-contrib pac "official update count (Arch only)"
+    any 3 "AUR helper for the update count (install yay or paru from the AUR)" "" manual yay paru
+else
+    any 3 "update count for the bar badge" "" manual checkupdates apt
+fi
 cmd 3 nwg-displays nwg-displays pac "extra in Settings > Hyprland > Displays"
 cmd 3 hyprpm hyprland pac "only for the scroll-overview plugin"
 cmd 3 warp-cli cloudflare-warp-bin aur "WARP toggle"
@@ -340,7 +364,7 @@ any 3 "Discord client (Vesktop / Equibop / Discord)" vesktop aur vesktop equibop
 section "Bare-system layer (what a minimal Hyprland / no-desktop install often lacks)"
 # --------------------------------------------------------------------------
 # libexec_has <name>: executable in /usr/lib or /usr/libexec (portals live there, not in PATH)
-libexec_has() { local d; for d in /usr/lib /usr/libexec /usr/lib64; do [ -x "$d/$1" ] && return 0; done; return 1; }
+libexec_has() { local d; for d in /usr/lib /usr/libexec /usr/lib64 "$HOME/.nix-profile/libexec" /nix/var/nix/profiles/sekaipop-system/libexec; do [ -x "$d/$1" ] && return 0; done; return 1; }
 
 if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ -S "${XDG_RUNTIME_DIR:-/nonexistent}/bus" ]; then
     record 1 "D-Bus session bus" 1 dbus pac
@@ -363,7 +387,19 @@ for f in /usr/lib/libEGL.so* /usr/lib64/libEGL.so* /usr/lib/*-linux-gnu/libEGL.s
 done
 if [ "$egl" = 0 ] && have ldconfig; then ldconfig -p 2>/dev/null | grep -q 'libEGL\.so' && egl=1; fi
 if [ "$egl" = 0 ] && [ -x /sbin/ldconfig ]; then /sbin/ldconfig -p 2>/dev/null | grep -q 'libEGL\.so' && egl=1; fi
-if [ "$egl" = 1 ]; then
+if [ -f "$NIX_QT_ENV" ]; then
+    # Nix programs don't use the distro's Mesa: they load the one at /run/opengl-driver.
+    if [ -d /run/opengl-driver/share/glvnd/egl_vendor.d ]; then
+        record 1 "OpenGL/EGL stack for Nix programs (/run/opengl-driver)" 1 "" manual
+    else
+        record 1 "OpenGL/EGL stack for Nix programs (/run/opengl-driver)" 0 "/run/opengl-driver: run install-deps-debian.sh again" manual "Hyprland can't start without it"
+    fi
+    if [ -x /run/wrappers/bin/unix_chkpwd ] && [ -x /run/wrappers/bin/polkit-agent-helper-1 ]; then
+        record 1 "setuid helpers for Nix's PAM and polkit (/run/wrappers/bin)" 1 "" manual
+    else
+        record 1 "setuid helpers for Nix's PAM and polkit (/run/wrappers/bin)" 0 "/run/wrappers/bin: run install-deps-debian.sh again" manual "without them the lockscreen can't check your password"
+    fi
+elif [ "$egl" = 1 ]; then
     record 1 "OpenGL/EGL stack (Qt Quick renders with it)" 1 mesa pac
 else
     record 1 "OpenGL/EGL stack (Qt Quick renders with it)" 0 mesa pac "also a GPU driver: vulkan-radeon / vulkan-intel / nvidia-utils"
@@ -467,8 +503,13 @@ show_tier() { # <tier> <title>
     [ -z "$pac$aur$man" ] && return
     pac=${pac//|/ }; aur=${aur//|/ }
     printf '\n  %s%s%s\n' "$B" "$title" "$Z"
-    [ -n "$pac" ] && printf '    sudo pacman -S --needed %s\n' "$pac"
-    [ -n "$aur" ] && printf '    yay -S %s\n' "$aur"
+    if have pacman; then
+        [ -n "$pac" ] && printf '    sudo pacman -S --needed %s\n' "$pac"
+        [ -n "$aur" ] && printf '    yay -S %s\n' "$aur"
+    elif [ -n "$pac$aur" ]; then
+        printf '    (Arch names) %s\n' "$pac${pac:+${aur:+ }}$aur"
+        have apt-get && printf '    ./install.sh installs these here (apt + Nix)\n'
+    fi
     if [ -n "$man" ]; then
         printf '    install by hand:\n'
         while IFS= read -r m; do printf '      - %s\n' "$m"; done <<<"${man//|/$'\n'}"

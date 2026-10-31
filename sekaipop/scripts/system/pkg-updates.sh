@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Helper for PackageUpdatesService.qml: how many package updates are waiting
-# on an Arch system.
+# on an Arch system (or, without pacman, on a Debian / Ubuntu / Mint one, from apt).
 #
 #   pkg-updates.sh check <aur: 1|0>
 #
@@ -16,12 +16,27 @@
 # private copy of the sync database: it never needs root and never leaves the
 # system in the "partial upgrade" state that `pacman -Sy` would. Its exit
 # codes are 0 (updates), 2 (none) and 1 (error).
+#
+# With apt, `apt list --upgradable` reads the package lists the system already
+# keeps fresh (Update Manager, unattended-upgrades): no root either. There is
+# no AUR there, so aur stays 0.
 
 mode="$1"
 want_aur="${2:-0}"
 
 case "$mode" in
     check)
+        if ! command -v pacman >/dev/null 2>&1 && command -v apt >/dev/null 2>&1; then
+            out=$(LC_ALL=C apt list --upgradable 2>/dev/null) || { echo "status=error"; exit 0; }
+            # name/suite new arch [upgradable from: old]
+            out=$(printf '%s\n' "$out" | grep '\[upgradable from:')
+            echo "status=ok"
+            echo "repo=$(printf '%s\n' "$out" | grep -c .)"
+            echo "aur=0"
+            [ -n "$out" ] && printf '%s\n' "$out" | head -n 40 \
+                | awk '{ sub(/\/.*/, "", $1); old = $NF; sub(/\]$/, "", old); print "pkg=" $1 " " old " -> " $2 }'
+            exit 0
+        fi
         if ! command -v checkupdates >/dev/null 2>&1; then
             echo "status=nocmd"
             exit 0

@@ -7,7 +7,7 @@ import qs.modules.common
 // Pending package updates (Arch): a count for the bar's badge
 // (UpdatesBadge.qml), looked up by scripts/system/pkg-updates.sh with `checkupdates`
 // (pacman-contrib; needs no root) and, when you ask for it, the AUR through
-// paru or yay.
+// paru or yay. Without pacman it counts apt's updates instead (Debian, Ubuntu, Mint).
 //
 //   repoCount, aurCount, total   what is waiting
 //   packages                     ["name 1.0 -> 1.1", ...] (the first few, repo then AUR)
@@ -158,7 +158,8 @@ Singleton {
         "checkupdates 2>/dev/null; echo; "
         + "if command -v paru >/dev/null 2>&1; then paru; "
         + "elif command -v yay >/dev/null 2>&1; then yay; "
-        + "else sudo pacman -Syu; fi; "
+        + "elif command -v pacman >/dev/null 2>&1; then sudo pacman -Syu; "
+        + "else sudo apt update && sudo apt upgrade; fi; "
         + "echo; printf 'Press Enter to close '; read _"
 
     function terminalCommand() {

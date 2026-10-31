@@ -101,6 +101,7 @@ Most shells pick one look and theme it. SekaiPop starts from a single design lan
 | Need | Notes |
 |---|---|
 | **Arch-based distro** (Arch, CachyOS, EndeavourOS) | The installer uses `pacman` and the AUR |
+| *or* **Debian-based distro** (Debian, Ubuntu, Linux Mint) | The installer uses `apt`, plus [Nix](https://nixos.org) for Hyprland, Quickshell and Qt (see [below](#debian)) |
 | **Hyprland 0.55+** | The config is **Lua** (`hyprland.lua`); older versions can't read it |
 | **Quickshell** | `quickshell` or `quickshell-git` |
 | **Qt 6.7+** | Shaders ship built for Qt 6.12. On older Qt the installer rebuilds them once (needs `qt6-shadertools`) |
@@ -109,6 +110,23 @@ Most shells pick one look and theme it. SekaiPop starts from a single design lan
 
 > [!IMPORTANT]
 > GPU drivers are **never** touched by the installer. Install your own (especially NVIDIA) before you start.
+
+<details id="debian">
+<summary><b>Debian, Ubuntu, Linux Mint</b> (apt + Nix)</summary>
+<br>
+
+Their repositories don't have Hyprland 0.55+, Quickshell or Qt 6.7+, so on these systems `install-deps.sh` hands over to `install-deps-debian.sh`, which takes those from [nixpkgs](https://github.com/NixOS/nixpkgs) instead. The same `get.sh` / `./install.sh` command works. What it does:
+
+- **apt** installs the system side: PipeWire, NetworkManager, BlueZ, polkitd, the portals, fonts, kitty, tesseract and so on.
+- **Nix** (the official multi-user installer, if you don't have it yet) installs Hyprland, Quickshell, Qt 6 and the Wayland tools listed in [`nix/flake.nix`](nix/flake.nix) into `~/.nix-profile`. The first download is a few GB.
+- So that Nix programs work on a non-NixOS system, it makes what NixOS has: `/run/opengl-driver` (Mesa from the same nixpkgs) and `/run/wrappers/bin`, which links to your distro's own `unix_chkpwd` and `polkit-agent-helper-1` (the lockscreen and the polkit prompt need them). Both come from `/etc/tmpfiles.d/sekaipop-nix.conf`. It also links the Hyprland screen-sharing portal into `/usr/share`.
+- It adds **Hyprland (SekaiPop)** to the login screen. Your current desktop stays installed and selectable.
+
+Run the installer again to update. It moves the Nix packages and their GPU drivers to newer nixpkgs together, which matters: they have to match. NVIDIA's proprietary driver is not available to Nix programs this way, so on an NVIDIA-only machine Hyprland may not start.
+
+To remove it: `nix profile remove sekaipop-full` (or `-core` / `-everything`), `sudo rm /nix/var/nix/profiles/sekaipop-system* /etc/tmpfiles.d/sekaipop-nix.conf /usr/local/bin/sekaipop-hyprland /usr/share/wayland-sessions/sekaipop-hyprland.desktop`, and delete the `hyprland` portal links in `/usr/share/xdg-desktop-portal`, `/usr/share/dbus-1/services` and `/etc/systemd/user`.
+
+</details>
 
 <details>
 <summary><b>Core packages</b> (the shell can't start without these)</summary>

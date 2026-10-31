@@ -22,7 +22,8 @@
 #   --restore           put back the Hyprland config that was backed up by the last run
 #   -h, --help
 #
-# Run as your normal user (it uses sudo where needed). Needs Arch / CachyOS / EndeavourOS for the packages.
+# Run as your normal user (it uses sudo where needed). Packages: Arch / CachyOS / EndeavourOS with pacman,
+# or Debian / Ubuntu / Linux Mint with apt + Nix (install-deps-debian.sh).
 
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -37,7 +38,7 @@ while [ $# -gt 0 ]; do
         --no-deps) NODEPS=1 ;;
         --with-tests) WITH_TESTS=1 ;;
         --restore) RESTORE=1 ;;
-        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
         --) shift; DEPS_ARGS=("$@"); break ;;
         *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
     esac
@@ -180,6 +181,10 @@ if [ "$NODEPS" = 0 ]; then
     [ "$YES" = 1 ] && FLAGS+=(--yes)
     [ "$HYPR" != merge ] && FLAGS+=(--no-session)    # full/skip handle the session themselves
     SEKAIPOP_FULL_INSTALL=1 bash "$HERE/install-deps.sh" "${FLAGS[@]}" "${DEPS_ARGS[@]}" || fail "install-deps.sh reported problems (see above)"
+    # Without pacman, Hyprland and Quickshell come from Nix: this shell may not have them on PATH yet.
+    if ! have pacman && [ -d "$HOME/.nix-profile/bin" ]; then
+        case ":$PATH:" in *":$HOME/.nix-profile/bin:"*) ;; *) PATH="$HOME/.nix-profile/bin:$PATH" ;; esac
+    fi
 
     if [ "$HYPR" = full ] && have pacman; then
         # used by the keybinds / autostart of the preconfigured config
@@ -226,6 +231,7 @@ fi
 
 # shaders: .qsb files are built with Qt 6.12 and older Qt cannot read them
 QTV=$(pacman -Q qt6-base 2>/dev/null | awk '{print $2}' | grep -oE '^[0-9]+\.[0-9]+')
+[ -z "$QTV" ] && QTV=$(sed -n 's/^SEKAIPOP_QT_VERSION=\([0-9]*\.[0-9]*\).*/\1/p' "$HOME/.nix-profile/share/sekaipop/nix-qt.env" 2>/dev/null)
 if [ -n "$QTV" ] && ! ver_ge "$QTV" 6.12; then
     info "Qt $QTV is older than 6.12: rebuilding the shaders once"
     if [ -f "$QS_DEST/shaders/compile-shaders.sh" ]; then
@@ -351,6 +357,8 @@ esac
 # login session
 if [ -f /usr/share/wayland-sessions/hyprland.desktop ]; then
     ok "login session 'Hyprland' is installed (pick it, not the 'uwsm' one, in your login screen)"
+elif [ -f /usr/share/wayland-sessions/sekaipop-hyprland.desktop ]; then
+    ok "login session 'Hyprland (SekaiPop)' is installed (pick it in your login screen)"
 else
     warn "no Hyprland session file found in /usr/share/wayland-sessions: is the hyprland package installed?"
 fi
@@ -392,7 +400,11 @@ else
     result bad "Finished with ${#FAILED[@]} problem(s), see above"
 fi
 printf '\n  %sNext%s\n' "$B" "$Z"
-nx "If you did not reload above: log out and back in (pick the plain Hyprland session)."
+if [ -f /usr/share/wayland-sessions/sekaipop-hyprland.desktop ] && [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+    nx "Log out and pick ${B}Hyprland (SekaiPop)${Z} in your login screen."
+else
+    nx "If you did not reload above: log out and back in (pick the plain Hyprland session)."
+fi
 printf '      %sThe shell starts by itself. By hand:%s  %sqs -c sekaipop%s\n' "$D" "$Z" "$B" "$Z"
 nx "Keybinds: ${B}Super + /${Z} opens the cheat sheet.  ${B}Super${Z} (tap) = apps.  ${B}Super + I${Z} = settings."
 nx "Config mistakes are written to ${B}~/.cache/sekaipop/hypr-errors.log${Z} (the rest still loads)."

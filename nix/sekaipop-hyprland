@@ -1,0 +1,26 @@
+#!/bin/sh
+# Starts the Nix-installed Hyprland from the login screen, on a distro without pacman.
+# Installed to /usr/local/bin by install-deps-debian.sh, used by sekaipop-hyprland.desktop.
+
+nixsh=/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+[ -r "$nixsh" ] && . "$nixsh"
+
+prof="$HOME/.nix-profile"
+case ":$PATH:" in *":$prof/bin:"*) ;; *) PATH="$prof/bin:$PATH" ;; esac
+case ":${XDG_DATA_DIRS:-}:" in
+    *":$prof/share:"*) ;;
+    *) XDG_DATA_DIRS="$prof/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
+esac
+export PATH XDG_DATA_DIRS
+
+# Nix's glibc reads its own locale archive; the distro's glibc ignores this variable.
+[ -f "$prof/lib/locale/locale-archive" ] && export LOCALE_ARCHIVE="$prof/lib/locale/locale-archive"
+
+export XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland
+
+if [ ! -e /run/opengl-driver ]; then
+    echo "sekaipop-hyprland: /run/opengl-driver is missing, run install-deps-debian.sh again" >&2
+fi
+
+command -v start-hyprland >/dev/null 2>&1 && exec start-hyprland "$@"
+exec Hyprland "$@"

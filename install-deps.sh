@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # install-deps.sh: installs everything SekaiPop needs to be a full working desktop
 # on Arch / CachyOS / EndeavourOS (anything with pacman), starting from a minimal Hyprland system.
+# On Debian / Ubuntu / Linux Mint it hands over to install-deps-debian.sh (apt + Nix).
 #
 # It does the same three jobs as end-4's "./setup install", for this rice:
 #   1. packages      (repo packages with pacman, the rest from the AUR with yay/paru)
@@ -25,6 +26,11 @@
 
 set -u
 
+# No pacman but apt (Debian, Ubuntu, Linux Mint): the apt + Nix installer does the same job.
+if ! command -v pacman >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    exec bash "$(cd "$(dirname "$0")" && pwd)/install-deps-debian.sh" "$@"
+fi
+
 DRY=0; YES=0; CORE_ONLY=0; WITH_OPT=0; DESKTOP=1; GPU=auto; DDC=0; FM=auto
 UPDATE=1; AUR=1; SERVICES=1; FONTS=1; SESSION=1
 while [ $# -gt 0 ]; do
@@ -42,7 +48,7 @@ while [ $# -gt 0 ]; do
         --no-services) SERVICES=0 ;;
         --no-fonts) FONTS=0 ;;
         --no-session) SESSION=0 ;;
-        -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
         *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
     esac
     shift
@@ -111,7 +117,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 [ "${SEKAIPOP_FULL_INSTALL:-0}" = 1 ] || banner "SekaiPop dependencies" "packages, fonts, services, groups"
 step "Checking the system"
 [ "$(id -u)" = 0 ] && { echo "Run this as your normal user, not root (it calls sudo itself)." >&2; exit 1; }
-have pacman || { echo "pacman not found: this installer is for Arch-based systems. Read DEPENDENCIES.md for the package list." >&2; exit 1; }
+have pacman || { echo "pacman not found: this installer is for Arch-based systems (install-deps-debian.sh covers apt). Read DEPENDENCIES.md for the package list." >&2; exit 1; }
 have sudo   || { echo "sudo not found: install it first (pacman -S sudo) and add yourself to the wheel group." >&2; exit 1; }
 [ "$DRY" = 1 ] && info "DRY RUN: nothing will be changed."
 ok "distro: $(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-unknown}")"

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Hyprland (SekaiPop)
+Comment=Hyprland and the SekaiPop shell, from Nix
+Exec=/usr/local/bin/sekaipop-hyprland
+Type=Application
+DesktopNames=Hyprland
