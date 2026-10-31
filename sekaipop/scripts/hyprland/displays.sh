@@ -5,25 +5,27 @@
 #   displays.sh apply <spec>...     change the screens now (nothing is saved)
 #   displays.sh save  <spec>...     write ~/.config/hypr/monitors.lua
 #
-# <spec> is  name|on|mode|x|y|scale   (mode like 1920x1080@144.00, or "preferred")
+# <spec> is  name|on|mode|x|y|scale|transform   (mode like 1920x1080@144.00, or "preferred";
+#            transform 0-7 as Hyprland has it, left out = 0)
 #         or name|off            (or name|off|x|y: where to park it, see below)
 #
 # monitors.lua is the file nwg-displays writes and hyprland.lua loads, and this
 # writes it in the same shape, so the two can be used side by side. Lines in an
-# existing block that are not ours (transform, vrr, bitdepth, mirror ...) are carried
+# existing block that are not ours (vrr, bitdepth, mirror ...) are carried
 # over; the old file is kept as monitors.lua.bak. Every value is checked before it
 # goes into a Lua line.
 
 dir="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
 file="$dir/monitors.lua"
 
-# name mode x y scale -> ok (0) or not (1)
+# name mode x y scale transform -> ok (0) or not (1)
 valid_on() {
     case "$1" in ''|*[!A-Za-z0-9_.:-]*) return 1 ;; esac
     case "$2" in ''|*[!A-Za-z0-9@.]*) return 1 ;; esac
     case "$3" in ''|-|*[!0-9-]*) return 1 ;; esac
     case "$4" in ''|-|*[!0-9-]*) return 1 ;; esac
     case "$5" in ''|*[!0-9.]*) return 1 ;; esac
+    case "$6" in [0-7]) ;; *) return 1 ;; esac
     return 0
 }
 
@@ -54,7 +56,7 @@ extras() {
                 name = s
                 next
             }
-            if (line ~ /^[ \t]*(mode|position|scale|disabled)[ \t]*=/) next
+            if (line ~ /^[ \t]*(mode|position|scale|transform|disabled)[ \t]*=/) next
             sub(/^[ \t]+/, "", line)
             sub(/,[ \t]*$/, "", line)
             if (line != "") buf = buf line "\n"
@@ -69,13 +71,14 @@ case "$1" in
         # Screens that come on first, then the ones that go off: never none.
         for pass in on off; do
             for spec in "$@"; do
-                IFS='|' read -r name state mode x y scale <<EOF2
+                IFS='|' read -r name state mode x y scale tf <<EOF2
 $spec
 EOF2
                 [ "$state" = "$pass" ] || continue
                 if [ "$state" = on ]; then
-                    valid_on "$name" "$mode" "$x" "$y" "$scale" || { echo "bad spec: $spec" >&2; exit 2; }
-                    hyprctl eval "hl.monitor({ output = \"$name\", mode = \"$mode\", position = \"${x}x${y}\", scale = $scale })" >/dev/null 2>&1
+                    tf="${tf:-0}"
+                    valid_on "$name" "$mode" "$x" "$y" "$scale" "$tf" || { echo "bad spec: $spec" >&2; exit 2; }
+                    hyprctl eval "hl.monitor({ output = \"$name\", mode = \"$mode\", position = \"${x}x${y}\", scale = $scale, transform = $tf })" >/dev/null 2>&1
                 else
                     valid_name "$name" || { echo "bad spec: $spec" >&2; exit 2; }
                     hyprctl eval "hl.monitor({ output = \"$name\", disabled = true })" >/dev/null 2>&1
@@ -95,11 +98,11 @@ EOF2
         shift
         # Check everything before anything is written.
         for spec in "$@"; do
-            IFS='|' read -r name state mode x y scale <<EOF2
+            IFS='|' read -r name state mode x y scale tf <<EOF2
 $spec
 EOF2
             if [ "$state" = on ]; then
-                valid_on "$name" "$mode" "$x" "$y" "$scale" || { echo "bad spec: $spec" >&2; exit 2; }
+                valid_on "$name" "$mode" "$x" "$y" "$scale" "${tf:-0}" || { echo "bad spec: $spec" >&2; exit 2; }
             elif [ "$state" = off ]; then
                 valid_name "$name" || { echo "bad spec: $spec" >&2; exit 2; }
             else
@@ -116,11 +119,12 @@ EOF2
         {
             printf '%s\n\n' '-- Written by the sekaipop shell (Settings > Hyprland > Displays) in the format nwg-displays uses. Do not edit manually.'
             for spec in "$@"; do
-                IFS='|' read -r name state mode x y scale <<EOF2
+                IFS='|' read -r name state mode x y scale tf <<EOF2
 $spec
 EOF2
                 if [ "$state" = on ]; then
                     printf 'hl.monitor({\n    output = "%s",\n    mode = "%s",\n    position = "%sx%s",\n    scale = %s' "$name" "$mode" "$x" "$y" "$scale"
+                    [ "${tf:-0}" = 0 ] || printf ',\n    transform = %s' "$tf"
                     extras "$old" "$name" | while IFS= read -r line; do
                         printf ',\n    %s' "$line"
                     done

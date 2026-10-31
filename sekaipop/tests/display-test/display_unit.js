@@ -2,7 +2,7 @@
 const fs = require("fs")
 const locate = require("../lib/locate.js")
 const src = fs.readFileSync(locate("modules/common/functions/DisplayMath.js"), "utf8").replace(".pragma library", "")
-const D = new Function(src + "; return { SCALES, parseModes, matchMode, modeById, logicalSize, placeOf, positions, spec, resolutions, currentRes, rates, modeForRes, overlaps, snap, separate, dock, reflow, normalize, touches, unlinked, view }")()
+const D = new Function(src + "; return { SCALES, parseModes, matchMode, modeById, logicalSize, placeOf, positions, spec, rotation, turned, ROTATIONS, resolutions, currentRes, rates, modeForRes, overlaps, snap, separate, dock, reflow, normalize, touches, unlinked, view }")()
 
 let fails = 0
 function eq(a, b, msg) {
@@ -53,7 +53,7 @@ eq(D.positions([OFF], "x"), {}, "nothing on")
 eq(D.positions([A, { ...B, transform: 1 }], "A").B, [1920, 0], "rotated B still starts at A's edge")
 
 // specs
-eq(D.spec("A", true, "1920x1080@144.00", 0, 0, 1), "A|on|1920x1080@144.00|0|0|1.00", "on spec")
+eq(D.spec("A", true, "1920x1080@144.00", 0, 0, 1), "A|on|1920x1080@144.00|0|0|1.00|0", "on spec")
 eq(D.spec("A", false), "A|off", "off spec")
 
 // choices
@@ -112,6 +112,13 @@ eq(D.touches(M, rc("S", 2000, 0, 100, 100)), false, "a gap")
 eq(D.unlinked([M]), [], "one screen is one piece")
 eq(D.unlinked([M, rc("S", 1920, 0, 100, 100), rc("T", 2020, 50, 100, 100)]), [], "a chain is one piece")
 eq(D.unlinked([M, rc("S", 1920, 0, 100, 100), rc("T", 3000, 0, 100, 100)]), ["T"], "a far screen is cut off")
+// rotation
+eq(D.spec("A", true, "1920x1080@144.00", 0, 0, 1, 1), "A|on|1920x1080@144.00|0|0|1.00|1", "on spec carries the rotation")
+eq(D.spec("A", true, "1920x1080@144.00", 0, 0, 1, 9), "A|on|1920x1080@144.00|0|0|1.00|0", "a transform Hyprland doesn't have counts as 0")
+eq(D.spec("A", false, "", 0, 0, 1, 3), "A|off|0|0", "off spec has no rotation")
+eq([D.turned(0, 1), D.turned(3, 0), D.turned(5, 2), D.turned(4, 3)], [1, 0, 6, 7], "turning keeps a flip")
+eq(D.ROTATIONS.map(r => r.id), ["0", "1", "2", "3"], "four rotations")
+
 // view
 const V = D.view([M, rc("S", 1920, 0, 1280, 720)], 600, 200)
 eq(V.scale > 0 && V.scale <= 200 / 1080, true, "scale fits the box")

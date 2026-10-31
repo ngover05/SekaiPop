@@ -117,11 +117,30 @@ function positions(items, mainName) {
 
 // The argument displays.sh takes for one screen: "name|on|mode|x|y|scale" or "name|off".
 // A screen that is off may carry a parking spot: "name|off|x|y".
-function spec(name, on, modeId, x, y, scale) {
+function spec(name, on, modeId, x, y, scale, transform) {
     if (!on)
         return typeof x === "number" && typeof y === "number" ? name + "|off|" + x + "|" + y : name + "|off";
-    return [name, "on", modeId, x, y, Number(scale).toFixed(2)].join("|");
+    return [name, "on", modeId, x, y, Number(scale).toFixed(2), rotation(transform)].join("|");
 }
+
+// Hyprland's transform: 0-3 turn the picture 0 / 90 / 180 / 270 degrees, 4-7 are the
+// same four flipped. Anything else counts as 0.
+function rotation(transform) {
+    var t = transform | 0;
+    return t >= 0 && t <= 7 ? t : 0;
+}
+
+// Turn a screen to `turn` (0-3) and keep whether it was flipped.
+function turned(transform, turn) {
+    return (rotation(transform) >= 4 ? 4 : 0) + ((turn | 0) % 4 + 4) % 4;
+}
+
+var ROTATIONS = [
+    { id: "0", label: "Normal", icon: "crop_landscape" },
+    { id: "1", label: "90°", icon: "crop_portrait" },
+    { id: "2", label: "180°", icon: "crop_landscape" },
+    { id: "3", label: "270°", icon: "crop_portrait" }
+];
 
 // Distinct resolutions of a screen, biggest first, "1920x1080" ... at most `limit`
 // (the one in use is always kept).

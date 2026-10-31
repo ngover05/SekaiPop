@@ -630,7 +630,7 @@ SettingsPage {
             wrapMode: Text.WordWrap
             text: DisplayService.confirming
                 ? "Keep these display settings? If you don't answer, the screens go back to how they were in " + DisplayService.secondsLeft + " s."
-                : "Change what you need (move, resize, switch screens on or off), then press Apply. You get " + DisplayService.confirmSeconds + " seconds to keep it before it goes back, so a wrong mode can't leave you with a black screen."
+                : "Change what you need (move, resize, rotate, switch screens on or off), then press Apply. You get " + DisplayService.confirmSeconds + " seconds to keep it before it goes back, so a wrong mode can't leave you with a black screen."
             color: DisplayService.confirming ? mt.pInk : mt.pInkSub
             font.family: mt.fontFamily
             font.pixelSize: 16
@@ -738,6 +738,15 @@ SettingsPage {
                 }
 
                 SettingChoice {
+                    visible: scr.d !== null && scr.d.on
+                    label: "Rotation"
+                    sublabel: "For a screen on its side"
+                    current: scr.d ? String(scr.d.transform % 4) : "0"
+                    options: DisplayService.rotations
+                    onPicked: id => DisplayService.setRotation(scr.modelData, id)
+                }
+
+                SettingChoice {
                     visible: scr.d !== null && scr.d.on && scr.modelData !== DisplayService.mainName
                     label: "Placed"
                     sublabel: "Jump next to " + DisplayService.mainName
@@ -790,7 +799,7 @@ SettingsPage {
             visible: page.hasNwg && !DisplayService.confirming
             icon: "display_settings"
             label: "nwg-displays"
-            detail: "Rotate, mirror and more"
+            detail: "Mirror, flip and more"
             onActivated: Quickshell.execDetached(["nwg-displays"])
         }
     }

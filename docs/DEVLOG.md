@@ -4,6 +4,16 @@ The detailed notes written while SekaiPop was built: what each change touched, w
 and what was only read through, and how to check it. The short release notes are in
 `sekaipop/CHANGELOG.md`.
 
+## Unreleased — Displays: Rotation
+
+**Not run on a live Quickshell** (the shell on this desktop runs an installed copy, not this checkout). Checked: `tests/display-test/display_unit.js` and `service_sim.js` pass with new rotation cases (the spec carries it, a bad transform counts as 0, a flip is kept, rotating moves the screen past it, Apply sends it and Go back restores the old one); the other JS tests give the same results as before. `qmllint` passes `DisplayService.qml` and `SettingsPageHyprland.qml`. `displays.sh save` was run against a throwaway config folder (a new `transform` replaces the old line, `vrr` is still carried, `|8` is refused, a six-field spec means 0). `hyprctl eval` on an output that doesn't exist confirmed `hl.monitor` takes `transform` and refuses more than 7.
+
+- `DisplayMath.js`: `spec()` has a seventh field, the transform (0-7); `rotation()`, `turned()` (keeps the flip bit), `ROTATIONS`.
+- `DisplayService.qml`: `setRotation(name, turn)` treats a turn like a resize (`resized()`), since a screen on its side swaps width and height; `draftSpecs()` / `liveSpecs()` send the transform. `logicalSize()` already swapped for odd transforms, so the layout drew rotated screens right before; there just wasn't a control.
+- `displays.sh`: reads and checks the field, sends `transform` on apply and writes it on save (only when not 0); `transform` is no longer one of the lines carried over from the old block.
+- `SettingsPageHyprland.qml`: Rotation after Scale; the nwg-displays key now says "Mirror, flip and more".
+- **To check:** turn a side screen to 90° and back with Apply, then Keep, then `hyprctl reload` (it stays turned); let the countdown run out on a rotation (it goes back); rotate the main screen with another to its right (the other one follows the new edge).
+
 ## Unreleased — Getting and updating plugins from Settings (the core of hako)
 
 **Run on a live Quickshell 0.3.1 session**, in a second shell from this checkout with its own XDG folders and `SEKAIPOP_PLUGIN_LIST` pointing at this branch's `plugins.json`, beside the installed one. Done there, through ipc and on screen: installing masshirodev/sekaipop-tailscale from GitHub (the meter, then the installed note with its next steps), a check, an update, Updated with Go back, going back, pinning, removing (settings kept), the timed check's notification, and About / Update's Plugins and Get plugins cards and Desktop › Plugins with a plugin of each origin (installed, linked to a folder elsewhere, copied in). Checked: `tests/plugin-test/repos_unit.js` (new: the rules, plugins.json against the README, the wiring), `plugin_repos_test.sh` (new: the script against local git repositories, no network), `manifest_unit.js`, `form_unit.js`, `plugin_state_test.sh` and `registry_unit.js` pass; the other JS tests give the same results as `main`.
