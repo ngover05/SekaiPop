@@ -23,6 +23,24 @@ Scope {
     // e.g. "system-auth" — and change this one line.
     property string pamService: "login"
 
+    // True when this Quickshell is a Nix build on a distro that isn't NixOS (the
+    // Debian / Mint install, install-deps-debian.sh). Nix's libpam only loads
+    // modules from its own store folder, so the distro's "login" can name one it
+    // doesn't have (pam_ecryptfs on Mint with an encrypted home) and fail every
+    // password. Then the password goes through pam/lock-password instead: just
+    // pam_unix. Found once at start by nixCheck below; false until then.
+    property bool nixOnDistro: false
+
+    Process {
+        id: nixCheck
+        running: true
+        // sh's parent is this Quickshell. NixOS's own /etc/pam.d works with Nix's PAM.
+        command: ["sh", "-c", "[ -e /etc/NIXOS ] && exit 0; case $(readlink /proc/$PPID/exe) in /nix/store/*) echo nix ;; esac"]
+        stdout: StdioCollector {
+            onStreamFinished: root.nixOnDistro = this.text.trim() === "nix"
+        }
+    }
+
     property string currentText: ""
     property bool unlockInProgress: false
 
@@ -295,7 +313,8 @@ Scope {
 
     PamContext {
         id: pam
-        config: root.pamService
+        configDirectory: root.nixOnDistro ? Quickshell.shellDir + "/modules/sekai/lock/pam" : "/etc/pam.d"
+        config: root.nixOnDistro ? "lock-password" : root.pamService
 
         // The password prompt: answer it with what was typed.
         onPamMessage: {
