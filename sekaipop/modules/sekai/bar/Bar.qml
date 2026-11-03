@@ -1,6 +1,5 @@
 import Quickshell
 import Quickshell.Hyprland
-import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
 import qs.services
@@ -125,10 +124,11 @@ PanelWindow {
     : win.stripSize) : 0
     // Auto would reserve the whole window: spell out the strip.
     exclusionMode: ExclusionMode.Normal
-    // The equalizer card has text fields (preset name, Last.fm key). A popup only
-    // gets the keyboard through its parent layer surface, which by default takes
-    // none: ask for it while the card is open (and only then).
-    WlrLayershell.keyboardFocus: win.eqPopupOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // The equalizer card and plugin popups have text fields. A popup only gets the
+    // keyboard through its parent layer surface, which by default takes none: ask
+    // for it while one of those cards is open (and only then).
+    WlrLayershell.keyboardFocus: (win.eqPopupOpen || win.pluginPopup !== "")
+        ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     // Transparent style: the pills sit straight on the wallpaper, so the space
     // under (or beside) them should be small. Two things are taken off what the
     // bar reserves:
@@ -803,79 +803,6 @@ PanelWindow {
         }
     }
 
-    // Keyboard layout: this bar's own small slice of Hyprland state,
-    // same reasoning as activeWorkspace/focusedWindow below — it's
-    // Hyprland-native, so it lives here rather than in its own
-    // *Source.qml. Only shown when there's more than one layout
-    // configured (see KeyboardLayoutIndicator.qml).
-    property string xkbLayoutName: ""
-    property int xkbLayoutCount: 0
-    readonly property string xkbLayoutCode: xkbLayoutCount > 1 && xkbLayoutName !== ""
-    ? xkbLayoutName.slice(0, 2).toUpperCase() : ""
-
-    Process {
-        id: xkbFetch
-        running: true
-        command: ["hyprctl", "-j", "devices"]
-        stdout: StdioCollector {
-            id: xkbCollector
-            onStreamFinished: {
-                try {
-                    const parsed = JSON.parse(xkbCollector.text)
-                    const kb = (parsed.keyboards || []).find(k => k.main === true) || (parsed.keyboards || [])[0]
-                    if (kb) {
-                        win.xkbLayoutName = kb.active_keymap || ""
-                        win.xkbLayoutCount = (kb.layout || "").split(",").filter(s => s.length > 0).length
-                    }
-                } catch (e) {
-                    console.warn("Bar.qml: couldn't parse `hyprctl -j devices` for keyboard layout")
-                }
-            }
-        }
-    }
-
-    Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            // Hyprland sends "activelayout" as "<device>,<layout name>"
-            if (event.name === "activelayout" && win.xkbLayoutCount > 1)
-                win.xkbLayoutName = event.data.substring(event.data.indexOf(",") + 1)
-                // A reload can add or drop layouts (kb_layout = "us,ru"), so ask again.
-                else if (event.name === "configreloaded") {
-                    xkbFetch.running = false
-                    xkbFetch.running = true
-                }
-        }
-    }
-
-    // The Hyprland page's keyboard card changes kb_layout live: read the list again
-    // a moment after, once Hyprland has rebuilt the keymaps.
-    Connections {
-        target: HyprlandSettings
-        function onApplied(path) {
-            if (path.indexOf("input.kb_") === 0)
-                xkbRefetch.restart()
-        }
-    }
-
-    Timer {
-        id: xkbRefetch
-        interval: 400
-        onTriggered: {
-            xkbFetch.running = false
-            xkbFetch.running = true
-        }
-    }
-
-    // `hyprctl switchxkblayout` is its own hyprctl command, not a dispatcher, so
-    // it is the same on a Lua-mode and a hyprlang config (the old
-    // hl.dsp.switchxkblayout(...) guess was never confirmed to exist). "all"
-    // moves every keyboard together, so the code on the bar is always the one
-    // you are typing with.
-    function cycleKeyboardLayout() {
-        Quickshell.execDetached(["hyprctl", "switchxkblayout", "all", "next"])
-    }
-
     // This monitor's own workspace, falling back to the focused one
     readonly property var monitor: Hyprland.monitorFor(screen)
     readonly property int activeWorkspace: NiriWorkspaces.running ? NiriWorkspaces.activeOn(screen?.name ?? "") : monitor?.activeWorkspace?.id ?? Hyprland.focusedWorkspace?.id ?? 1
@@ -1130,8 +1057,8 @@ PanelWindow {
                 statusDetail: StatusIconsService.detail
                 onStatusClicked: win.quickPanel.toggleOn(win.screen)
 
-                keyboardLayoutCode: win.xkbLayoutCode
-                onKeyboardLayoutClicked: win.cycleKeyboardLayout()
+                keyboardLayoutCode: KeyboardLayoutService.code
+                onKeyboardLayoutClicked: KeyboardLayoutService.cycle()
 
                 notificationCount: win.quickPanel.notificationSource.count
                 notificationsMuted: !win.quickPanel.source.notificationsOn
